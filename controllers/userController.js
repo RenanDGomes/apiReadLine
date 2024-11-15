@@ -5,24 +5,46 @@ async function adicionarUser(transaction) {
   const nome = readlineSync.question('Digite o nome do usuario: ');
   const email = readlineSync.question('Digite o email do usuario: ');
 
-  return User.create({
-    nome: nome,
-    email: email
-  }, { transaction });
+  try {
+    return await User.create({
+      nome: nome,
+      email: email
+    }, { transaction });
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      console.log('Erro: O email já está sendo utilizado por outro usuário.');
+    } else {
+      console.log('Erro inesperado ao adicionar o usuário:', error);
+    }
+    throw error;
+  }
 }
 
 async function editarUser(transaction) {
   const email = readlineSync.question('Digite o email do usuario a ser editado: ');
 
-  const user = await User.findOne({ where: { email: email } });
+  // Configura um temporizador para exibir a mensagem após 3 segundos
+  const timeoutId = setTimeout(() => {
+    console.log("Há um usuário realizando processo no banco. Por favor, aguarde...");
+  }, 3000);
 
-  if (user) {
-    const novoNome = readlineSync.question('Digite o novo nome do usuario: ');
-    user.nome = novoNome;
-    await user.save({ transaction });
-    console.log('Usuário atualizado com sucesso!');
-  } else {
-    console.log('Usuario nao encontrado!');
+  try {
+    // Executa a consulta com 'FOR UPDATE' para bloquear a linha para edição
+    const user = await User.findOne({ where: { email: email }, lock: transaction.LOCK.UPDATE, transaction });
+
+    // Cancela o temporizador caso a consulta seja executada sem bloqueio
+    clearTimeout(timeoutId);
+
+    if (user) {
+      const novoNome = readlineSync.question('Digite o novo nome do usuario: ');
+      user.nome = novoNome;
+      await user.save({ transaction });
+      console.log('Usuário atualizado com sucesso!');
+    } else {
+      console.log('Usuario nao encontrado!');
+    }
+  } catch (error) {
+    console.log('Erro ao editar o usuário:', error);
   }
 }
 
